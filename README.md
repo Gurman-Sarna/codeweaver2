@@ -520,21 +520,8 @@ function GeneratedUI() {
 
 ---
 
-## 🤝 Contributing
-
-This is an assignment project, but feedback is welcome!
-
----
-
-## 📄 License
-
-MIT License - See LICENSE file for details
-
----
-
 ## 🙏 Acknowledgments
 
-- Ryze AI for the assignment
 - Google Gemini for AI capabilities
 - React team for the framework
 - Vite for blazing fast dev experience
@@ -544,7 +531,7 @@ MIT License - See LICENSE file for details
 ## 📞 Contact
 
 **Developer:** Gurman Sarna  
-**Email:** gurman@example.com  
+**Email:** gurmansarnain@gmail.com 
 **GitHub:** [@Gurman-Sarna](https://github.com/Gurman-Sarna)
 
 ---
