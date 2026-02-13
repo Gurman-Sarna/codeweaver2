@@ -1,9 +1,9 @@
 import express from 'express';
 import cors from 'cors';
-import { generateUI, validateComponents } from './aiAgent.js';
+import { generateUI, validateComponents, listAvailableModels } from './aiAgent.js';
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(cors());
@@ -25,12 +25,16 @@ app.post('/api/generate', async (req, res) => {
     }
     
     console.log(`\n📨 Received request for session: ${sessionId}`);
+    console.log(`💭 User intent: "${userIntent}"`);
     
     // Generate UI using the AI agent
     const result = await generateUI(userIntent, existingCode);
     
     if (!result.success) {
-      return res.status(500).json({ error: result.error });
+      return res.status(500).json({ 
+        error: result.error,
+        fullError: result.fullError
+      });
     }
     
     // Validate components
@@ -55,7 +59,8 @@ app.post('/api/generate', async (req, res) => {
         explanation: result.explanation,
         plan: result.plan,
         timestamp: result.timestamp,
-        validation
+        validation,
+        modelUsed: result.modelUsed
       });
       
       // Keep only last 20 versions to prevent memory issues
@@ -72,7 +77,10 @@ app.post('/api/generate', async (req, res) => {
     
   } catch (error) {
     console.error('❌ Server error:', error);
-    res.status(500).json({ error: 'Internal server error: ' + error.message });
+    res.status(500).json({ 
+      error: 'Internal server error',
+      details: error.message 
+    });
   }
 });
 
@@ -90,7 +98,8 @@ app.get('/api/history/:sessionId', (req, res) => {
       version: v.version,
       userIntent: v.userIntent,
       timestamp: v.timestamp,
-      validation: v.validation
+      validation: v.validation,
+      modelUsed: v.modelUsed
     }))
   });
 });
@@ -128,21 +137,61 @@ app.post('/api/validate', (req, res) => {
   res.json(validation);
 });
 
-// Health check
+/**
+ * GET /api/models
+ * List available Gemini models (for debugging)
+ */
+app.get('/api/models', async (req, res) => {
+  try {
+    const models = await listAvailableModels();
+    res.json({ models });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /health
+ * Health check endpoint
+ */
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    service: 'CodeWeaver API'
+  });
 });
 
 // Start server
 app.listen(PORT, () => {
   console.log(`
-╔═══════════════════════════════════════╗
-║   🚀 CodeWeaver Server Running       ║
-║   📍 Port: ${PORT}                      ║
-║   🤖 AI Agent: Ready                 ║
-║   📚 Components: 8 fixed types       ║
-╚═══════════════════════════════════════╝
+╔════════════════════════════════════════════╗
+║   🚀 CodeWeaver Server Running            ║
+║   📍 Port: ${PORT}                           ║
+║   🤖 AI Agent: Ready                      ║
+║   📚 Components: 8 fixed types            ║
+║   🔧 Model: Auto-detect with fallback    ║
+╚════════════════════════════════════════════╝
+
+Endpoints:
+  POST   /api/generate       - Generate UI
+  GET    /api/history/:id    - Get version history
+  GET    /api/version/:id/:v - Get specific version
+  POST   /api/validate       - Validate code
+  GET    /api/models         - List available models
+  GET    /health             - Health check
+
+Ready to generate UIs! 🎨
   `);
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  res.status(500).json({
+    error: 'Internal server error',
+    message: err.message
+  });
 });
 
 export default app;

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as ComponentLibrary from './ComponentLibrary';
+import * as Babel from '@babel/standalone';
 
 /**
  * LivePreview Component
@@ -18,42 +19,31 @@ function LivePreview({ code }) {
     }
 
     try {
-      // Create a function from the code string
-      // This is safe because we control the execution environment
-      
       // Remove import statements (we'll provide components via scope)
       let processedCode = code
         .replace(/import\s+.*from\s+['"].*['"];?\n?/g, '')
         .replace(/export\s+default\s+/g, '');
 
-      // Extract the function body
-      const functionMatch = processedCode.match(/function\s+\w+\s*\([^)]*\)\s*{([\s\S]*)}/);
-      
-      if (functionMatch) {
-        const functionBody = functionMatch[1];
-        
-        // Create a function with React and components in scope
-        const GeneratedComponent = new Function(
-          'React',
-          'useState',
-          'useEffect',
-          ...Object.keys(ComponentLibrary),
-          `return function GeneratedUI() { ${functionBody} }`
-        )(
-          React,
-          React.useState,
-          React.useEffect,
-          ...Object.values(ComponentLibrary)
-        );
+      // Transpile JSX to plain JS using Babel (@babel/standalone)
+      const transformed = Babel.transform(processedCode, { presets: ['react'] }).code;
 
-        setComponent(() => GeneratedComponent);
-        setError(null);
-      } else {
-        throw new Error('Could not parse component function');
-      }
+      // Evaluate the transformed code and extract the GeneratedUI function
+      // Provide React and common hooks + the component implementations into the scope
+      const reactHelpers = ['useState', 'useEffect', 'useRef', 'useMemo', 'useCallback'];
+      const paramNames = ['React', ...reactHelpers, ...Object.keys(ComponentLibrary)];
+      const paramValues = [React, React.useState, React.useEffect, React.useRef, React.useMemo, React.useCallback, ...Object.values(ComponentLibrary)];
+
+      const wrapper = `(function(${paramNames.join(',')}){\n${transformed}\n return typeof GeneratedUI !== 'undefined' ? GeneratedUI : null;\n})`;
+
+      const GeneratedComponent = new Function(`return ${wrapper}`)()(...paramValues);
+
+      if (!GeneratedComponent) throw new Error('Generated component not found after transpilation');
+
+      setComponent(() => GeneratedComponent);
+      setError(null);
     } catch (err) {
       console.error('Error rendering component:', err);
-      setError(err.message);
+      setError(err.message || String(err));
       setComponent(null);
     }
   }, [code]);

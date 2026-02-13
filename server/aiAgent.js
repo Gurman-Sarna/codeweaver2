@@ -1,12 +1,55 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import dotenv from 'dotenv';
+import path from 'path';
+
+// Try loading .env.local from likely locations (server cwd, project root, parent)
+const envPaths = [
+  path.resolve(process.cwd(), '.env.local'),
+  path.resolve(process.cwd(), '..', '.env.local'),
+  path.resolve(process.cwd(), '..', '..', '.env.local')
+];
+
+for (const p of envPaths) {
+  dotenv.config({ path: p });
+}
+
+// Also load default .env if present
+dotenv.config();
+
+// ============================================
+// CONFIGURATION - CHANGE ONLY HERE!
+// ============================================
+// Support multiple environment variable names for flexibility
+let API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GENERATIVE_API_KEY || null;
+if (API_KEY && typeof API_KEY === 'string') {
+  API_KEY = API_KEY.trim().replace(/;$/, '');
+}
+
+if (!API_KEY) {
+  throw new Error('Missing Gemini/Generative API key. Set GEMINI_API_KEY or GOOGLE_API_KEY in your environment (or add .env.local in the repo root).');
+}
+
+const CONFIG = {
+  API_KEY,
+  // Models to try in order (will automatically fallback)
+  MODELS_TO_TRY: [
+    'gemini-2.5-flash',
+    'gemini-2.5-pro',
+    'gemini-2.5-flash-lite',
+    'gemini-2.0-flash',
+    'gemini-2.0-flash-lite'
+  ]
+};
 
 // Initialize Gemini AI
-const genAI = new GoogleGenerativeAI('AIzaSyCzRSX8FGEuP2t1ERA8plbrA_LnIMNNjSQ');
+const genAI = new GoogleGenerativeAI(API_KEY);
+
+// Cache for working model
+let workingModel = null;
 
 /**
  * FIXED COMPONENT LIBRARY
  * These are the ONLY components the AI can use.
- * This ensures deterministic, consistent UI generation.
  */
 const COMPONENT_LIBRARY = {
   Button: {
@@ -44,11 +87,44 @@ const COMPONENT_LIBRARY = {
 };
 
 /**
+ * Get a working Gemini model with automatic fallback
+ */
+async function getWorkingModel() {
+  // Return cached model if we found one that works
+  if (workingModel) {
+    return genAI.getGenerativeModel({ model: workingModel });
+  }
+
+  // Try each model in order
+  for (const modelName of CONFIG.MODELS_TO_TRY) {
+    try {
+      console.log(`🔍 Trying model: ${modelName}...`);
+      const model = genAI.getGenerativeModel({ model: modelName });
+      
+      // Test if model works with a simple request
+      await model.generateContent('test');
+      
+      // Success! Cache this model
+      workingModel = modelName;
+      console.log(`✅ Found working model: ${modelName}`);
+      return model;
+      
+    } catch (error) {
+      console.log(`❌ Model ${modelName} failed: ${error.message}`);
+      continue;
+    }
+  }
+
+  // If no model works, throw error
+  throw new Error('No working Gemini model found. Please check your API key and available models.');
+}
+
+/**
  * STEP 1: PLANNER
  * Analyzes user intent and creates a structured plan
  */
 async function plannerAgent(userIntent, existingCode = null) {
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const model = await getWorkingModel();
   
   const plannerPrompt = `You are a UI Planning Agent. Your job is to analyze user intent and create a structured plan.
 
@@ -83,16 +159,24 @@ Create a JSON plan with this structure:
 
 Respond ONLY with valid JSON, no markdown, no explanation.`;
 
-  const result = await model.generateContent(plannerPrompt);
-  const response = result.response.text();
-  
-  // Clean up response to extract JSON
-  let jsonText = response.trim();
-  if (jsonText.startsWith('```json')) {
-    jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+  try {
+    const result = await model.generateContent(plannerPrompt);
+    const response = await result.response.text();
+    
+    // Clean up response to extract JSON
+    let jsonText = response.trim();
+    if (jsonText.startsWith('```json')) {
+      jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+    }
+    if (jsonText.startsWith('```')) {
+      jsonText = jsonText.replace(/```\n?/g, '');
+    }
+    
+    return JSON.parse(jsonText);
+  } catch (error) {
+    console.error('Planner error:', error);
+    throw new Error(`Planning failed: ${error.message}`);
   }
-  
-  return JSON.parse(jsonText);
 }
 
 /**
@@ -100,7 +184,7 @@ Respond ONLY with valid JSON, no markdown, no explanation.`;
  * Converts the plan into actual React code
  */
 async function generatorAgent(plan, existingCode = null) {
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const model = await getWorkingModel();
   
   const generatorPrompt = `You are a Code Generator Agent. Convert the plan into React code.
 
@@ -136,15 +220,21 @@ export default function GeneratedUI() {
   );
 }`;
 
-  const result = await model.generateContent(generatorPrompt);
-  let code = result.response.text().trim();
-  
-  // Clean up markdown code blocks if present
-  if (code.startsWith('```')) {
-    code = code.replace(/```[a-z]*\n?/g, '').replace(/```\n?$/g, '');
+  try {
+    const result = await model.generateContent(generatorPrompt);
+    const response = await result.response.text();
+    let code = response.trim();
+    
+    // Clean up markdown code blocks if present
+    if (code.startsWith('```')) {
+      code = code.replace(/```[a-z]*\n?/g, '').replace(/```\n?$/g, '');
+    }
+    
+    return code;
+  } catch (error) {
+    console.error('Generator error:', error);
+    throw new Error(`Code generation failed: ${error.message}`);
   }
-  
-  return code;
 }
 
 /**
@@ -152,7 +242,7 @@ export default function GeneratedUI() {
  * Explains the AI's decisions in human terms
  */
 async function explainerAgent(plan, code, userIntent) {
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const model = await getWorkingModel();
   
   const explainerPrompt = `You are an Explanation Agent. Explain the UI decisions in simple terms.
 
@@ -168,44 +258,67 @@ Explain in 3-4 sentences:
 
 Be conversational and helpful. Start with "I've created..." or "I've modified..."`;
 
-  const result = await model.generateContent(explainerPrompt);
-  return result.response.text().trim();
+  try {
+    const result = await model.generateContent(explainerPrompt);
+    const response = await result.response.text();
+    return response.trim();
+  } catch (error) {
+    console.error('Explainer error:', error);
+    throw new Error(`Explanation failed: ${error.message}`);
+  }
 }
 
 /**
  * ORCHESTRATOR
- * Runs all three agents in sequence
+ * Runs all three agents in sequence with error handling
  */
 export async function generateUI(userIntent, existingCode = null) {
   try {
     console.log(`\n🎯 Starting UI generation for: "${userIntent}"`);
+    console.log(`📝 Mode: ${existingCode ? 'MODIFY existing' : 'CREATE new'}`);
     
     // Step 1: Plan
     console.log('📋 Step 1: Planning...');
     const plan = await plannerAgent(userIntent, existingCode);
+    console.log('✅ Plan created');
     
     // Step 2: Generate
     console.log('⚙️  Step 2: Generating code...');
     const code = await generatorAgent(plan, existingCode);
+    console.log('✅ Code generated');
     
     // Step 3: Explain
     console.log('💬 Step 3: Explaining decisions...');
     const explanation = await explainerAgent(plan, code, userIntent);
+    console.log('✅ Explanation created');
     
-    console.log('✅ UI generation complete!\n');
+    console.log('✨ UI generation complete!\n');
     
     return {
       success: true,
       plan,
       code,
       explanation,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      modelUsed: workingModel
     };
   } catch (error) {
     console.error('❌ Error in UI generation:', error);
+    
+    // Provide helpful error message
+    let errorMessage = error.message;
+    if (error.message.includes('API key')) {
+      errorMessage = 'Invalid API key. Please check your Gemini API key in server/aiAgent.js';
+    } else if (error.message.includes('404')) {
+      errorMessage = 'Model not found. The Gemini API models may have changed. Check available models at: https://ai.google.dev/models';
+    } else if (error.message.includes('quota')) {
+      errorMessage = 'API quota exceeded. Please check your Gemini API usage limits.';
+    }
+    
     return {
       success: false,
-      error: error.message
+      error: errorMessage,
+      fullError: error.message
     };
   }
 }
@@ -227,4 +340,20 @@ export function validateComponents(code) {
     usedComponents: [...new Set(usedComponents)],
     invalidComponents: invalid
   };
+}
+
+/**
+ * List available models (for debugging)
+ */
+export async function listAvailableModels() {
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${CONFIG.API_KEY}`
+    );
+    const data = await response.json();
+    return data.models?.map(m => m.name) || [];
+  } catch (error) {
+    console.error('Error listing models:', error);
+    return [];
+  }
 }
