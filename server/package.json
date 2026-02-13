@@ -1,0 +1,19 @@
+{
+  "name": "codeweaver-server",
+  "version": "1.0.0",
+  "description": "AI-powered deterministic UI generator backend",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "keywords": ["ai", "ui-generator", "agent"],
+  "author": "Gurman Sarna",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "@google/generative-ai": "^0.21.0"
+  }
+}
