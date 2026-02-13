@@ -1,4 +1,9 @@
 {
+  "name": "codeweaver-monorepo",
+  "private": true,
+  "scripts": {
+    "build": "cd client && npm ci && npm run build"
+  },
   "dependencies": {
     "@google/genai": "^1.41.0"
   }
