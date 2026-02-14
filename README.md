@@ -1,7 +1,8 @@
 # 🧵 CodeWeaver - AI-Powered Deterministic UI Generator
 
 > Transform natural language into working React UIs using AI agents and a fixed component library
-> Deployed on Vercel : https://codeweaver23.vercel.app
+
+Deployed on Vercel : https://codeweaver23.vercel.app
 
 ![CodeWeaver Banner](https://img.shields.io/badge/AI-Powered-blue) ![React](https://img.shields.io/badge/React-18.3-61dafb) ![Node](https://img.shields.io/badge/Node-20+-green)
 
