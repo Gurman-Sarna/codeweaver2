@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { FiSend, FiCode, FiEye, FiRotateCcw, FiAlertCircle, FiCheck } from 'react-icons/fi';
 import LivePreview from './components/LivePreview';
 import './App.css';
@@ -12,6 +12,12 @@ function App() {
   const [versions, setVersions] = useState([]);
   const [currentVersion, setCurrentVersion] = useState(null);
   const [showHome, setShowHome] = useState(true);
+  const messagesEndRef = useRef(null);
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, isLoading]);
 
   // Load version history on mount
   useEffect(() => {
@@ -21,6 +27,9 @@ function App() {
   const loadVersionHistory = async () => {
     try {
       const response = await fetch(`/api/history/${sessionId}`);
+      if (!response.ok) {
+        throw new Error(`Failed to load history: ${response.status}`);
+      }
       const data = await response.json();
       setVersions(data.versions || []);
     } catch (error) {
@@ -51,7 +60,19 @@ function App() {
         })
       });
 
-      const data = await response.json();
+      // Check if response is ok before parsing
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status} ${response.statusText}`);
+      }
+
+      let data;
+      try {
+        data = await response.json();
+      } catch (jsonError) {
+        // Response is not valid JSON
+        const text = await response.text();
+        throw new Error(`Invalid response from server: ${text || 'Empty response'}`);
+      }
 
       if (data.success) {
         // Add AI response to chat
@@ -72,7 +93,7 @@ function App() {
       } else {
         setMessages(prev => [...prev, {
           role: 'error',
-          content: `Error: ${data.error}`
+          content: `Error: ${data.error || 'Unknown error occurred'}`
         }]);
       }
     } catch (error) {
@@ -103,6 +124,9 @@ function App() {
   const handleRollback = async (version) => {
     try {
       const response = await fetch(`/api/version/${sessionId}/${version}`);
+      if (!response.ok) {
+        throw new Error(`Failed to rollback: ${response.status}`);
+      }
       const data = await response.json();
       
       setGeneratedCode(data.code);
@@ -231,6 +255,7 @@ function App() {
                 </div>
               </div>
             )}
+            <div ref={messagesEndRef} />
           </div>
 
           <div className="chat-input-container">

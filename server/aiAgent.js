@@ -26,7 +26,9 @@ if (API_KEY && typeof API_KEY === 'string') {
 }
 
 if (!API_KEY) {
-  throw new Error('Missing Gemini/Generative API key. Set GEMINI_API_KEY or GOOGLE_API_KEY in your environment (or add .env.local in the repo root).');
+  console.warn('\n⚠️  Warning: Missing Gemini/Generative API key.');
+  console.warn('The server will start, but AI endpoints will return a clear error when invoked.');
+  console.warn('Set GEMINI_API_KEY or GOOGLE_API_KEY in your environment (or add .env.local in the repo root).\n');
 }
 
 const CONFIG = {
@@ -41,8 +43,8 @@ const CONFIG = {
   ]
 };
 
-// Initialize Gemini AI
-const genAI = new GoogleGenerativeAI(API_KEY);
+// Initialize Gemini AI only when an API key is present
+const genAI = API_KEY ? new GoogleGenerativeAI(API_KEY) : null;
 
 // Cache for working model
 let workingModel = null;
@@ -90,6 +92,11 @@ const COMPONENT_LIBRARY = {
  * Get a working Gemini model with automatic fallback
  */
 async function getWorkingModel() {
+  // Ensure we have an API key before attempting to contact Gemini
+  if (!CONFIG.API_KEY || !genAI) {
+    throw new Error('Missing API key: Gemini/Generative API key not configured. Set GEMINI_API_KEY or GOOGLE_API_KEY.');
+  }
+
   // Return cached model if we found one that works
   if (workingModel) {
     return genAI.getGenerativeModel({ model: workingModel });

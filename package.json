@@ -7,4 +7,10 @@
   "dependencies": {
     "@google/genai": "^1.41.0"
   }
+  ,
+  "overrides": {
+    "glob": "13.0.3",
+    "fetch-blob": "4.0.0",
+    "node-domexception": "2.0.2"
+  }
 }

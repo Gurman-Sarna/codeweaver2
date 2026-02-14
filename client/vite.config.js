@@ -12,4 +12,9 @@ export default defineConfig({
       }
     }
   }
+  ,
+  build: {
+    // Increase the chunk size warning limit (in kB) to reduce noisy warnings for large bundles
+    chunkSizeWarningLimit: 2000
+  }
 })

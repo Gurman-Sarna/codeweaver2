@@ -21,7 +21,10 @@ app.post('/api/generate', async (req, res) => {
     const { userIntent, existingCode, sessionId } = req.body;
     
     if (!userIntent) {
-      return res.status(400).json({ error: 'userIntent is required' });
+      return res.status(400).json({ 
+        success: false,
+        error: 'userIntent is required' 
+      });
     }
     
     console.log(`\n📨 Received request for session: ${sessionId}`);
@@ -31,7 +34,9 @@ app.post('/api/generate', async (req, res) => {
     const result = await generateUI(userIntent, existingCode);
     
     if (!result.success) {
-      return res.status(500).json({ 
+      console.warn('⚠️  Generation failed:', result.error);
+      return res.status(400).json({ 
+        success: false,
         error: result.error,
         fullError: result.fullError
       });
@@ -69,15 +74,23 @@ app.post('/api/generate', async (req, res) => {
       }
     }
     
-    res.json({
-      ...result,
+    const responseData = {
+      success: true,
+      plan: result.plan,
+      code: result.code,
+      explanation: result.explanation,
+      timestamp: result.timestamp,
+      modelUsed: result.modelUsed,
       validation,
       version: versionHistory.get(sessionId)?.length || 1
-    });
+    };
+    
+    res.json(responseData);
     
   } catch (error) {
     console.error('❌ Server error:', error);
     res.status(500).json({ 
+      success: false,
       error: 'Internal server error',
       details: error.message 
     });
@@ -111,7 +124,7 @@ app.get('/api/history/:sessionId', (req, res) => {
 app.get('/api/version/:sessionId/:version', (req, res) => {
   const { sessionId, version } = req.params;
   const history = versionHistory.get(sessionId) || [];
-  const versionNum = parseInt(version);
+  const versionNum = Number.parseInt(version);
   
   const versionData = history.find(v => v.version === versionNum);
   
@@ -167,10 +180,10 @@ app.listen(PORT, () => {
   console.log(`
 ╔════════════════════════════════════════════╗
 ║   🚀 CodeWeaver Server Running            ║
-║   📍 Port: ${PORT}                           ║
+║   📍 Port: ${PORT}                        ║
 ║   🤖 AI Agent: Ready                      ║
 ║   📚 Components: 8 fixed types            ║
-║   🔧 Model: Auto-detect with fallback    ║
+║   🔧 Model: Auto-detect with fallback     ║
 ╚════════════════════════════════════════════╝
 
 Endpoints:
@@ -189,6 +202,7 @@ Ready to generate UIs! 🎨
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err);
   res.status(500).json({
+    success: false,
     error: 'Internal server error',
     message: err.message
   });
