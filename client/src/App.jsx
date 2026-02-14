@@ -3,6 +3,9 @@ import { FiSend, FiCode, FiEye, FiRotateCcw, FiAlertCircle, FiCheck } from 'reac
 import LivePreview from './components/LivePreview';
 import './App.css';
 
+// API Base URL - uses environment variable or defaults to relative path
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
+
 function App() {
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState('');
@@ -26,7 +29,7 @@ function App() {
 
   const loadVersionHistory = async () => {
     try {
-      const response = await fetch(`/api/history/${sessionId}`);
+      const response = await fetch(`${API_BASE}/history/${sessionId}`);
       if (!response.ok) {
         throw new Error(`Failed to load history: ${response.status}`);
       }
@@ -50,7 +53,7 @@ function App() {
 
     try {
       // Call AI agent API
-      const response = await fetch('/api/generate', {
+      const response = await fetch(`${API_BASE}/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -123,7 +126,7 @@ function App() {
 
   const handleRollback = async (version) => {
     try {
-      const response = await fetch(`/api/version/${sessionId}/${version}`);
+      const response = await fetch(`${API_BASE}/version/${sessionId}/${version}`);
       if (!response.ok) {
         throw new Error(`Failed to rollback: ${response.status}`);
       }
